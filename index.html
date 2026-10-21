@@ -1052,19 +1052,21 @@ function unitIsHeldForRange(equipment, borrowDate, returnDate){
     const list = (b.itemsExpanded && b.itemsExpanded.length) ? b.itemsExpanded : b.items;
     const usesUnit = list.some(it=>{
       if(it.returned) return false;
-      if(it.equipmentId === equipmentId) return true;
-      if(assetCodeUsable && isUsableAssetCode(it.assetCode) && String(it.assetCode).trim() === String(equipmentAssetCode).trim()) return true;
-      // ชั้นสำรองที่ 2 — สำหรับเครื่องมือที่ "ไม่มีรหัสครุภัณฑ์" ทั้งสองฝั่ง (ของเดิมในใบยืม และของใหม่ที่นำเข้า)
-      // ให้เทียบจาก "หมวดหมู่ + ชื่อ + ลำดับเครื่องในหมวดหมู่" แทน เพราะตอนนำเข้าไฟล์ Excel ใหม่
-      // ระบบจะกำหนดลำดับ (order) ให้ตามลำดับแถวในไฟล์เหมือนเดิม ถ้าแอดมินเรียงไฟล์ในลำดับเดิมตอนนำเข้าใหม่
-      // ก็จะช่วยเชื่อมโยงเครื่องมือที่ไม่มีรหัสครุภัณฑ์กลับมาได้เช่นกัน (ความแม่นยำต่ำกว่าการเทียบรหัสครุภัณฑ์
-      // เพราะขึ้นกับลำดับแถวในไฟล์ จึงใช้เป็นทางเลือกสำรองเมื่อไม่มีรหัสครุภัณฑ์ให้เทียบเท่านั้น)
-      if(!assetCodeUsable && !isUsableAssetCode(it.assetCode)
-         && equipmentCategory && it.category === equipmentCategory
-         && equipmentName && it.name === equipmentName
-         && typeof equipmentOrder === 'number' && typeof it.order === 'number'
-         && equipmentOrder === it.order) return true;
-      return false;
+      // จับคู่ตาม "ประเภท + ชื่อเครื่องมือ + รหัสครุภัณฑ์" ที่บันทึกไว้ในใบยืมนั้นเลย (ไม่พึ่ง id อย่างเดียว)
+      if(it.category && it.name){
+        if(it.category !== equipmentCategory || it.name !== equipmentName) return false;
+        const itCodeUsable = isUsableAssetCode(it.assetCode);
+        if(itCodeUsable || assetCodeUsable){
+          return itCodeUsable && assetCodeUsable && String(it.assetCode).split(',').map(s=>s.trim()).includes(String(equipmentAssetCode).trim());
+        }
+        // ทั้งสองฝั่งไม่มีรหัสครุภัณฑ์: แยกชิ้นด้วย id หรือลำดับเครื่อง
+        if(it.equipmentId === equipmentId) return true;
+        // id ยังมีอยู่ในคลังและเป็นของชิ้นอื่น → ไม่ใช่ชิ้นนี้ (ลำดับ order ของเครื่องชื่อเดียวกันใช้ค่าเดียวกัน แยกชิ้นไม่ได้)
+        if(it.equipmentId && (state.equipment||[]).some(e=>e.id === it.equipmentId)) return false;
+        return typeof equipmentOrder === 'number' && typeof it.order === 'number' && equipmentOrder === it.order;
+      }
+      // ใบยืมเก่าที่ไม่มีข้อมูลประเภท/ชื่อ: ใช้ id เป็นหลัก
+      return it.equipmentId === equipmentId;
     });
     if(!usesUnit) continue;
     // ใบยืมนี้ยัง "active" และเครื่องมือชิ้นนี้ "ยังไม่คืน" — ถ้าเลยกำหนดวันคืน (returnDate) มาแล้ว
