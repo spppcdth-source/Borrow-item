@@ -383,8 +383,8 @@ h1,h2,h3{ font-family:'Kanit','Sarabun',sans-serif; }
 
 /* ============ Print ============ */
 #print-area{ display:none; }
-.slip-page{ font-family:'TH Sarabun PSK','Sarabun',sans-serif; font-size:14pt; color:#000; padding:13mm 16mm 14mm; position:relative; }
-.slip-header-line{ display:flex; align-items:center; justify-content:center; min-height:12mm; text-align:center; font-weight:700; font-size:22pt; margin-bottom:8px; }
+.slip-page{ font-family:'TH Sarabun PSK','Sarabun',sans-serif; font-size:14pt; color:#000; padding:8mm 16mm 14mm; position:relative; }
+.slip-header-line{ display:flex; align-items:center; justify-content:center; min-height:8mm; text-align:center; font-weight:700; font-size:22pt; margin-bottom:6px; }
 .slip-logo{ position:absolute; left:14mm; top:5mm; height:22mm; width:auto; }
 .slip-field-row{ font-size:14pt; margin-bottom:10px; }
 .slip-field-row b{ font-weight:700; }
@@ -398,6 +398,8 @@ h1,h2,h3{ font-family:'Kanit','Sarabun',sans-serif; }
 .slip-table th,.slip-table td{ border:1px solid #000; padding:6px 8px; }
 .slip-table th{ background:#f0f0f0; text-align:center; vertical-align:middle; }
 .slip-table td.c{ text-align:center; }
+.slip-table th.chk-col{ padding:6px 2px; white-space:nowrap; font-size:13pt; }
+.slip-table td.chk-cell{ min-width:14mm; }
 .slip-table td.assetcode-cell{ line-height:1.4; }
 .slip-table th:nth-child(2),.slip-table td:nth-child(2){ white-space:nowrap; }
 .assetcode-line{ margin-bottom:6px; white-space:nowrap; }
@@ -2418,6 +2420,8 @@ function buildSlipHTML(b){
       <td>${esc(it.name)}</td>
       <td class="assetcode-cell">${codeHtml}</td>
       <td class="c">${it.qty}</td>
+      <td class="chk-cell"></td>
+      <td class="chk-cell"></td>
     </tr>`;
   }).join('');
   const bookingDateISO = b.createdAt ? b.createdAt.slice(0,10) : null;
@@ -2444,7 +2448,7 @@ function buildSlipHTML(b){
       <div class="slip-section-title">รายการเครื่องมือที่ยืม</div>
     </div>
     <table class="slip-table">
-      <thead><tr><th style="width:6%">ลำดับ</th><th style="width:13%">ประเภท</th><th>ชื่อเครื่องมือ</th><th style="width:32%">รหัสครุภัณฑ์</th><th style="width:8%">จำนวน</th></tr></thead>
+      <thead><tr><th style="width:6%">ลำดับ</th><th style="width:11%">ประเภท</th><th>ชื่อเครื่องมือ</th><th style="width:22%">รหัสครุภัณฑ์</th><th style="width:7%">จำนวน</th><th class="chk-col" style="width:11%">ก่อนใช้งาน</th><th class="chk-col" style="width:11%">หลังใช้งาน</th></tr></thead>
       <tbody>${itemsRows}</tbody>
     </table>
 
@@ -2469,7 +2473,7 @@ function printSlip(id){
   pageNumStyle.id = 'slip-page-number-style';
   const refCssText = slipHeaderRef(b.code).replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\r\n]/g,' ');
   pageNumStyle.textContent = `@media print{
-    @page{ margin-top:26mm;
+    @page{ margin-top:22mm;
       @top-left{ content:url('${SLIP_LOGO_PRINT}'); vertical-align:bottom; text-align:left; padding-left:14mm; }
       @top-right{ content: "${refCssText}\\A0\\A0\\A0(" counter(page) "/" counter(pages) ")"; font-size:14pt; color:#000; font-family:'TH Sarabun PSK','Sarabun',sans-serif; vertical-align:bottom; padding-bottom:7mm; }
       @top-center{ content:""; } @bottom-left{ content:""; } @bottom-center{ content:""; } @bottom-right{ content:""; } }
@@ -2527,8 +2531,8 @@ const SLIP_STANDALONE_CSS = `
   }
   *{box-sizing:border-box;}
   body{ font-family:'TH Sarabun PSK','Sarabun','Kanit',sans-serif; margin:0; padding:0; background:#fff; }
-  .slip-page{ font-family:'TH Sarabun PSK','Sarabun',sans-serif; font-size:14pt; color:#000; padding:15mm 16mm 14mm; position:relative; }
-  .slip-header-line{ display:flex; align-items:center; justify-content:center; min-height:12mm; text-align:center; font-weight:700; font-size:22pt; margin-bottom:8px; }
+  .slip-page{ font-family:'TH Sarabun PSK','Sarabun',sans-serif; font-size:14pt; color:#000; padding:8mm 16mm 14mm; position:relative; }
+  .slip-header-line{ display:flex; align-items:center; justify-content:center; min-height:8mm; text-align:center; font-weight:700; font-size:22pt; margin-bottom:6px; }
 .slip-logo{ position:absolute; left:14mm; top:5mm; height:22mm; width:auto; }
   .slip-field-row{ font-size:14pt; margin-bottom:10px; }
   .slip-field-row b{ font-weight:700; }
@@ -2542,6 +2546,8 @@ const SLIP_STANDALONE_CSS = `
   .slip-table th,.slip-table td{ border:1px solid #000; padding:6px 8px; }
   .slip-table th{ background:#f0f0f0; text-align:center; vertical-align:middle; }
   .slip-table td.c{ text-align:center; }
+.slip-table th.chk-col{ padding:6px 2px; white-space:nowrap; font-size:13pt; }
+.slip-table td.chk-cell{ min-width:14mm; }
   .slip-table td.assetcode-cell{ line-height:1.4; }
   .slip-table th:nth-child(2),.slip-table td:nth-child(2){ white-space:nowrap; }
 .assetcode-line{ margin-bottom:6px; white-space:nowrap; }
