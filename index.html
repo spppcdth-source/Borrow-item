@@ -2549,6 +2549,8 @@ function printSlip(id){
       @top-center{ content:""; } @bottom-left{ content:""; } @bottom-center{ content:""; } @bottom-right{ content:""; } }
     body.printing-slip .slip-page{ padding-top:0; }
     body.printing-slip .slip-logo{ display:none; }
+    /* ดึงหัวข้อ "ใบยืมเครื่องมือ กตพ." ขึ้น (ปรับค่า -5mm ได้: ยิ่งติดลบมาก ยิ่งขึ้นสูง) เนื้อหาด้านล่างขยับตามอัตโนมัติ */
+    body.printing-slip .slip-header-line{ margin-top:-5mm; }
   }`;
   document.head.appendChild(pageNumStyle);
 
