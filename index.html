@@ -1039,6 +1039,61 @@ function isUsableAssetCode(code){
 // เหตุผล: ถ้าแอดมิน "ล้างฐานข้อมูลทั้งหมด" แล้วนำเข้าเครื่องมือใหม่ ระบบจะสร้าง id ใหม่ให้ทุกครั้ง
 // ทำให้ใบยืมเก่าที่ยังไม่คืน (อ้างอิง id เดิม) หลุดการเชื่อมโยงกับเครื่องมือชิ้นเดิมที่นำเข้าใหม่
 // การเทียบรหัสครุภัณฑ์เพิ่มเป็นชั้นสำรอง ช่วยให้ระบบยังจำได้ว่าเครื่องมือชิ้นนี้ถูกยืมค้างอยู่จริง
+// จัดสรร \"ชิ้นที่ถือจริง\" ให้ใบยืมที่ id เดิมหายไป (เครื่องมือไม่มีรหัสครุภัณฑ์ เช่น กล่องโฟม)
+// - แต่ละใบยืมได้ชิ้นตามจำนวนที่ยืม โดยไม่ซ้ำกับใบอื่นที่ช่วงวันที่ทับซ้อนกัน (ใบที่วันที่ไม่ทับกันใช้ชิ้นเดียวกันได้)
+// - ผลคงที่ไม่ว่าจะถามด้วยช่วงวันที่ไหน และเก็บแคชไว้จนกว่าข้อมูลใบยืม/คลังจะเปลี่ยน
+let __orphanAllocCache = { sig:null, map:null };
+function getOrphanAllocation(){
+  const today = todayISO();
+  const equipment = state.equipment || [];
+  const eqIds = new Set(equipment.map(e=>e.id));
+  const active = state.borrows.filter(b=>b.status === 'active');
+  const sig = today+'#'+equipment.length+'#'+active.map(b=>b.id+':'+((b.itemsExpanded&&b.itemsExpanded.length)? b.itemsExpanded.filter(x=>!x.returned).length : 'i')).join('|');
+  if(__orphanAllocCache.sig === sig) return __orphanAllocCache.map;
+  const rangeOf = b => [b.borrowDate, (b.returnDate && b.returnDate < today) ? '9999-12-31' : b.returnDate];
+  const ordered = active.slice().sort((a,b)=> String(a.createdAt||a.code).localeCompare(String(b.createdAt||b.code)));
+  const validBy = new Map();
+  ordered.forEach(b=>{
+    const s = new Set();
+    ((b.itemsExpanded && b.itemsExpanded.length) ? b.itemsExpanded : []).forEach(x=>{ if(!x.returned && x.equipmentId && eqIds.has(x.equipmentId)) s.add(x.equipmentId); });
+    validBy.set(b.id, s);
+  });
+  const map = new Map();
+  ordered.forEach(b=>{
+    const list = (b.itemsExpanded && b.itemsExpanded.length) ? b.itemsExpanded : (b.items||[]);
+    const counts = {};
+    list.forEach(it=>{
+      if(it.returned || !it.category || !it.name) return;
+      if(isUsableAssetCode(it.assetCode)) return;
+      if(it.equipmentId && eqIds.has(it.equipmentId)) return;
+      const k = it.category+'|'+it.name;
+      counts[k] = (counts[k]||0) + ((list === b.items) ? (parseInt(it.qty,10)||1) : 1);
+    });
+    const mine = new Set();
+    map.set(b.id, mine);
+    const [s1,e1] = rangeOf(b);
+    Object.keys(counts).forEach(k=>{
+      const cut = k.indexOf('|');
+      const cat = k.slice(0,cut), name = k.slice(cut+1);
+      const unavailable = new Set(validBy.get(b.id));
+      ordered.forEach(o=>{
+        if(o === b) return;
+        const [s2,e2] = rangeOf(o);
+        if(!dateRangesOverlap(s1,e1,s2,e2)) return;
+        validBy.get(o.id).forEach(id=>unavailable.add(id));
+        (map.get(o.id) || []).forEach(id=>unavailable.add(id));
+      });
+      // เลือกชิ้นที่ "ยังไม่เคยถูกจัดให้ใบยืมอื่นเลย" ก่อน (ถึงวันที่ไม่ทับกัน) เพื่อให้นับจำนวนที่ว่างแบบระมัดระวัง
+      const usedAnywhere = new Set();
+      ordered.forEach(o=>{ if(o===b) return; validBy.get(o.id).forEach(id=>usedAnywhere.add(id)); (map.get(o.id)||[]).forEach(id=>usedAnywhere.add(id)); });
+      const cands = equipment.filter(q=> q.category===cat && q.name===name && !isUsableAssetCode(q.assetCode) && !unavailable.has(q.id));
+      cands.sort((x,y)=> (usedAnywhere.has(x.id)?1:0) - (usedAnywhere.has(y.id)?1:0));
+      cands.slice(0, counts[k]).forEach(q=>mine.add(q.id));
+    });
+  });
+  __orphanAllocCache = { sig, map };
+  return map;
+}
 function unitIsHeldForRange(equipment, borrowDate, returnDate){
   const equipmentId = (typeof equipment === 'object' && equipment) ? equipment.id : equipment;
   const equipmentAssetCode = (typeof equipment === 'object' && equipment) ? equipment.assetCode : null;
@@ -1070,17 +1125,10 @@ function unitIsHeldForRange(equipment, borrowDate, returnDate){
           return true;   // ใบยืมเก่าที่ไม่มีข้อมูลประเภท/ชื่อ: ใช้ id
         }
       }
-      // id เดิมหายไป (เช่น นำเครื่องมือเข้าระบบใหม่) → ถือว่าใบยืมถือกี่ชิ้นก็ล็อกชิ้นที่ "ยังไม่มีใครถือ" ในชื่อเดียวกันตามจำนวนนั้น
+      // id เดิมหายไป → ใช้ผลจัดสรรชิ้นที่ใบยืมนี้ถืออยู่จริง (ไม่ซ้ำกับใบอื่นที่ช่วงวันที่ทับกัน)
       if(orphanCount > 0){
-        const heldIds = new Set();
-        state.borrows.forEach(bb=>{
-          if(bb.status !== 'active') return;
-          ((bb.itemsExpanded && bb.itemsExpanded.length) ? bb.itemsExpanded : []).forEach(x=>{ if(!x.returned && x.equipmentId) heldIds.add(x.equipmentId); });
-        });
-        const free = (state.equipment||[]).filter(q=> q.category===equipmentCategory && q.name===equipmentName
-                                                     && !isUsableAssetCode(q.assetCode) && !heldIds.has(q.id));
-        const idx = free.findIndex(q=>q.id === equipmentId);
-        if(idx >= 0 && idx < orphanCount) return true;
+        const alloc = getOrphanAllocation().get(b.id);
+        if(alloc && alloc.has(equipmentId)) return true;
       }
       return false;
     })();
@@ -2470,7 +2518,11 @@ function buildSlipHTML(b){
       <thead><tr><th style="width:6%">ลำดับ</th><th style="width:11%">ประเภท</th><th>ชื่อเครื่องมือ</th><th style="width:22%">รหัสครุภัณฑ์</th><th style="width:7%">จำนวน</th><th class="chk-col" style="width:11%">ก่อนใช้งาน</th><th class="chk-col" style="width:11%">หลังใช้งาน</th></tr></thead>
       <tbody>${itemsRows}</tbody>
     </table>
-
+    <div class="slip-remark-line" style="display:flex;align-items:flex-end;gap:6px;margin:-8px 0 16px;break-inside:avoid;page-break-inside:avoid;">
+      <span style="white-space:nowrap;"><b>หมายเหตุ :</b></span>
+      <span style="flex:1;border-bottom:1.5px dotted #000;height:1.1em;"></span>
+      <span style="white-space:nowrap;">ผู้ตรวจสอบ</span>
+    </div>
 
     <table class="sig-grid"><tbody>
       <tr>${buildSigBox('ผู้ยืม')}${buildSigBox('ผู้ให้ยืม')}</tr>
