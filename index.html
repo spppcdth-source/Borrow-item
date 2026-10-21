@@ -1351,15 +1351,37 @@ function normalizeLegacyDepts(list){
   return list;
 }
 
+// ปีงบประมาณ (พ.ศ.): 1 ต.ค. - 30 ก.ย. เช่น 7 ต.ค. 2569 -> ปีงบประมาณ 2570
+function fiscalYearBE(d){
+  d = d || new Date();
+  const y = d.getFullYear() + 543;
+  return d.getMonth() >= 9 ? y + 1 : y;
+}
+// เลขรันถัดไป: นับเฉพาะรหัสของหน่วยงานเดียวกัน + ปีงบประมาณเดียวกัน (เริ่มที่ 0001 ใหม่ทุกปีงบประมาณ)
+// ใช้ค่าสูงสุดของเลขเดิม +1 (ไม่ใช้จำนวนรายการ จึงไม่ซ้ำแม้มีการลบใบยืมกลางลำดับ)
+function nextRunNo(list, dept, fy, midTag){
+  let max = 0;
+  const re = midTag
+    ? /-คส-(\d+)\/(\d{4})\s*$/
+    : /-(\d+)\/(\d{4})\s*$/;
+  (list||[]).forEach(x=>{
+    if(!x || x.dept!==dept || !x.code) return;
+    const c = String(x.code);
+    if(!midTag && c.indexOf('-คส-')!==-1) return;
+    const m = c.match(re);
+    if(m && parseInt(m[2],10)===fy){ const n = parseInt(m[1],10); if(n>max) max=n; }
+  });
+  return max + 1;
+}
 function nextBorrowCode(dept){
-  const prefix = dept;
-  const count = state.borrows.filter(b=>b.dept===dept).length + 1;
-  return `${prefix}-${String(count).padStart(4,'0')}/${beYear(new Date().getFullYear())}`;
+  const fy = fiscalYearBE();
+  const n = nextRunNo(state.borrows, dept, fy, false);
+  return `${dept}-${String(n).padStart(4,'0')}/${fy}`;
 }
 function nextReturnCode(dept){
-  const prefix = dept;
-  const count = state.returns.filter(r=>r.dept===dept).length + 1;
-  return `${prefix}-คส-${String(count).padStart(4,'0')}/${beYear(new Date().getFullYear())}`;
+  const fy = fiscalYearBE();
+  const n = nextRunNo(state.returns, dept, fy, true);
+  return `${dept}-คส-${String(n).padStart(4,'0')}/${fy}`;
 }
 
 
@@ -3097,8 +3119,8 @@ function renderBrokenSelectionBar(){
   </div>`;
 }
 
-function renderHistoryTab(){
-  const hm = state.manage.history || (state.manage.history = {catFilter:'', typeFilter:'', search:''});
+// รวมประวัติสอบเทียบ/ซ่อม ตามตัวกรองของแท็บ "ประวัติการจัดการเครื่องมือ" (ใช้ทั้งแสดงตารางและส่งออก Excel)
+function getHistoryRecords(hm){
   let records = [];
   state.equipment.forEach(e=>{
     (Array.isArray(e.calibHistory)?e.calibHistory:[]).forEach(h=>records.push({...h, type:'calib', equip:e}));
@@ -3108,13 +3130,58 @@ function renderHistoryTab(){
   if(hm.typeFilter) records = records.filter(r=>r.type===hm.typeFilter);
   if(hm.search) records = records.filter(r=>(r.equip.name+r.equip.assetCode+r.equip.brand+r.equip.model).toLowerCase().includes(hm.search.toLowerCase()));
   records.sort((a,b)=> (b.recordedAt||b.date||'').localeCompare(a.recordedAt||a.date||''));
+  return records;
+}
+// ส่งออกประวัติการจัดการเครื่องมือเป็น Excel (ตามตัวกรองที่เลือกอยู่) — ชีต 1 = ประวัติ, ชีต 2 = ข้อมูลเครื่องมือที่อยู่ในประวัตินั้น
+function exportHistoryExcel(){
+  const hm = state.manage.history || {catFilter:'', typeFilter:'', search:''};
+  const records = getHistoryRecords(hm);
+  if(records.length===0){ alert('ไม่มีประวัติให้ส่งออก'); return; }
+  const dateTH = (d)=> d ? fmtDateBE(String(d).slice(0,10)) : '';
+  const rows = [['วันที่ดำเนินการ','ประเภทงาน','ประเภท','รหัสพัสดุ','ชื่อเครื่องมือ','ยี่ห้อ','รุ่น','หน่วยงาน/ผู้ดำเนินการ','ค่าใช้จ่าย (บาท)','รายละเอียดการดำเนินงาน']];
+  records.forEach(r=>{
+    const e = r.equip;
+    rows.push([
+      dateTH(r.date), r.type==='calib'?'สอบเทียบ':'ซ่อมเครื่องมือ', e.category||'', e.assetCode||'', e.name||'',
+      e.brand||'', e.model||'', r.agency||'',
+      (typeof r.cost==='number' && !isNaN(r.cost)) ? r.cost : '', r.fixItems||''
+    ]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:16},{wch:14},{wch:12},{wch:30},{wch:34},{wch:14},{wch:14},{wch:24},{wch:14},{wch:40}];
+
+  // ชีต 2: ข้อมูลเครื่องมือแต่ละรายการ (ไม่ซ้ำ) พร้อมจำนวนครั้งที่สอบเทียบ/ซ่อม ตามรายการที่ส่งออก
+  const map = new Map();
+  records.forEach(r=>{
+    const e = r.equip;
+    if(!map.has(e)) map.set(e,{calib:0,repair:0,cost:0});
+    const m = map.get(e);
+    if(r.type==='calib') m.calib++; else m.repair++;
+    if(typeof r.cost==='number' && !isNaN(r.cost)) m.cost += r.cost;
+  });
+  const rows2 = [['ประเภท','รหัสพัสดุ','ชื่อเครื่องมือ','ยี่ห้อ','รุ่น','ราคา (บาท)','จำนวนครั้งที่สอบเทียบ','จำนวนครั้งที่ซ่อม','ค่าใช้จ่ายรวม (บาท)','หมายเหตุ']];
+  map.forEach((m,e)=>{
+    rows2.push([e.category||'', e.assetCode||'', e.name||'', e.brand||'', e.model||'', e.price?Number(e.price):'', m.calib, m.repair, m.cost, e.remark||'']);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(rows2);
+  ws2['!cols'] = [{wch:12},{wch:30},{wch:34},{wch:14},{wch:14},{wch:12},{wch:20},{wch:16},{wch:18},{wch:30}];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'ประวัติการจัดการ');
+  XLSX.utils.book_append_sheet(wb, ws2, 'ข้อมูลเครื่องมือ');
+  XLSX.writeFile(wb, `ประวัติการจัดการเครื่องมือ_${todayISO()}.xlsx`);
+}
+
+function renderHistoryTab(){
+  const hm = state.manage.history || (state.manage.history = {catFilter:'', typeFilter:'', search:''});
+  const records = getHistoryRecords(hm);
   const countCalib = records.filter(r=>r.type==='calib').length;
   const countRepair = records.filter(r=>r.type==='repair').length;
   return `
   <div class="card p-5">
     <div class="flex flex-wrap gap-3 items-start justify-between mb-1">
       <p class="text-sm subtle mb-4 flex-1 min-w-[240px]">ประวัติการดำเนินงานทั้งหมดที่มาจากการกดยืนยันในแท็บ "การสอบเทียบ" และ "เครื่องมือที่ชำรุด" เรียงจากรายการล่าสุดไปเก่าสุด</p>
-      <button class="btn-danger" data-act="clear-manage-history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;vertical-align:-0.16em;margin-right:0.32em;display:inline-block;flex:none"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> ล้างประวัติ</button>
+      <div class="flex gap-2 flex-wrap"><button class="btn-ghost" data-act="export-history-excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;vertical-align:-0.16em;margin-right:0.32em;display:inline-block;flex:none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ส่งออก Excel</button><button class="btn-danger" data-act="clear-manage-history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;vertical-align:-0.16em;margin-right:0.32em;display:inline-block;flex:none"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> ล้างประวัติ</button></div>
     </div>
     <div class="flex flex-wrap gap-3 items-end mb-4">
       <div>
@@ -4711,6 +4778,7 @@ function onClick(e){
     return;
   }
   if(act==='clear-manage-history'){ clearManageHistory(); return; }
+  if(act==='export-history-excel'){ exportHistoryExcel(); return; }
   if(act==='repair-calib-dates'){ repairCalibDates(); return; }
   if(act==='set-all-cycle-1'){ setAllCalibCycleOne(); return; }
   if(act==='repair-broken-status'){ repairBrokenStatus(); return; }
