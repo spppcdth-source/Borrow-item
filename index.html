@@ -1050,24 +1050,40 @@ function unitIsHeldForRange(equipment, borrowDate, returnDate){
   for(const b of state.borrows){
     if(b.status !== 'active') continue;
     const list = (b.itemsExpanded && b.itemsExpanded.length) ? b.itemsExpanded : b.items;
-    const usesUnit = list.some(it=>{
-      if(it.returned) return false;
-      // จับคู่ตาม "ประเภท + ชื่อเครื่องมือ + รหัสครุภัณฑ์" ที่บันทึกไว้ในใบยืมนั้นเลย (ไม่พึ่ง id อย่างเดียว)
-      if(it.category && it.name){
-        if(it.category !== equipmentCategory || it.name !== equipmentName) return false;
-        const itCodeUsable = isUsableAssetCode(it.assetCode);
-        if(itCodeUsable || assetCodeUsable){
-          return itCodeUsable && assetCodeUsable && String(it.assetCode).split(',').map(s=>s.trim()).includes(String(equipmentAssetCode).trim());
+    const usesUnit = (()=>{
+      let orphanCount = 0;   // จำนวนชิ้น (ไม่มีรหัสครุภัณฑ์) ที่ใบยืมถืออยู่ แต่ id เดิมไม่มีในคลังแล้ว
+      for(const it of list){
+        if(it.returned) continue;
+        // จับคู่ตาม "ประเภท + ชื่อเครื่องมือ + รหัสครุภัณฑ์" ที่บันทึกไว้ในใบยืมนั้นเลย
+        if(it.category && it.name){
+          if(it.category !== equipmentCategory || it.name !== equipmentName) continue;
+          const itCodeUsable = isUsableAssetCode(it.assetCode);
+          if(itCodeUsable || assetCodeUsable){
+            if(itCodeUsable && assetCodeUsable && String(it.assetCode).split(',').map(s=>s.trim()).includes(String(equipmentAssetCode).trim())) return true;
+            continue;
+          }
+          // ทั้งสองฝั่งไม่มีรหัสครุภัณฑ์ (เช่น กล่องโฟม): แยกชิ้นด้วย id
+          if(it.equipmentId === equipmentId) return true;
+          const idStillExists = it.equipmentId && (state.equipment||[]).some(q=>q.id === it.equipmentId);
+          if(!idStillExists) orphanCount += (list === b.items ? (parseInt(it.qty,10)||1) : 1);
+        } else if(it.equipmentId === equipmentId){
+          return true;   // ใบยืมเก่าที่ไม่มีข้อมูลประเภท/ชื่อ: ใช้ id
         }
-        // ทั้งสองฝั่งไม่มีรหัสครุภัณฑ์: แยกชิ้นด้วย id หรือลำดับเครื่อง
-        if(it.equipmentId === equipmentId) return true;
-        // id ยังมีอยู่ในคลังและเป็นของชิ้นอื่น → ไม่ใช่ชิ้นนี้ (ลำดับ order ของเครื่องชื่อเดียวกันใช้ค่าเดียวกัน แยกชิ้นไม่ได้)
-        if(it.equipmentId && (state.equipment||[]).some(e=>e.id === it.equipmentId)) return false;
-        return typeof equipmentOrder === 'number' && typeof it.order === 'number' && equipmentOrder === it.order;
       }
-      // ใบยืมเก่าที่ไม่มีข้อมูลประเภท/ชื่อ: ใช้ id เป็นหลัก
-      return it.equipmentId === equipmentId;
-    });
+      // id เดิมหายไป (เช่น นำเครื่องมือเข้าระบบใหม่) → ถือว่าใบยืมถือกี่ชิ้นก็ล็อกชิ้นที่ "ยังไม่มีใครถือ" ในชื่อเดียวกันตามจำนวนนั้น
+      if(orphanCount > 0){
+        const heldIds = new Set();
+        state.borrows.forEach(bb=>{
+          if(bb.status !== 'active') return;
+          ((bb.itemsExpanded && bb.itemsExpanded.length) ? bb.itemsExpanded : []).forEach(x=>{ if(!x.returned && x.equipmentId) heldIds.add(x.equipmentId); });
+        });
+        const free = (state.equipment||[]).filter(q=> q.category===equipmentCategory && q.name===equipmentName
+                                                     && !isUsableAssetCode(q.assetCode) && !heldIds.has(q.id));
+        const idx = free.findIndex(q=>q.id === equipmentId);
+        if(idx >= 0 && idx < orphanCount) return true;
+      }
+      return false;
+    })();
     if(!usesUnit) continue;
     // ใบยืมนี้ยัง "active" และเครื่องมือชิ้นนี้ "ยังไม่คืน" — ถ้าเลยกำหนดวันคืน (returnDate) มาแล้ว
     // แปลว่าเครื่องมือชิ้นนี้ยังถูกถืออยู่จริงเกินกว่าช่วงวันที่แจ้งไว้ตอนแรก (ยืมสาย/ค้างคืน)
@@ -2128,6 +2144,7 @@ function renderToolPicker(){
               const pendingN = g.pendingItems.length;
               const qty = f.picks[g.name+'|'+cat] || 0;
               const checked = qty > 0;
+              const single = isSingleQtyTool(g.name);
               return `
               <div class="tool-row ${remain===0?'tool-row-disabled':''}">
                 <label class="flex items-center gap-2 flex-1 min-w-0">
@@ -2138,10 +2155,10 @@ function renderToolPicker(){
                 <button type="button" class="tool-avail-btn" data-act="open-avail-cal" data-cat="${cat}" data-name="${escAttr(g.name)}" title="ดูว่าเครื่องมือนี้ถูกจอง/ยืมวันไหนไปแล้วบ้าง"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;vertical-align:-0.16em;margin-right:0.32em;display:inline-block;flex:none"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> ดูคิวการจอง</button>
                 <span class="qty-badge ${remain===0?'qty-zero':''}">คงเหลือ ${remain}</span>
                 ${pendingN>0 ? `<span class="qty-badge" style="background:#fef3c7;color:#92400e" title="เครื่องมือที่รอสอบเทียบ จะถูกจัดสรรให้ยืมหลังเครื่องมือที่พร้อมใช้หมดก่อน"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;vertical-align:-0.16em;margin-right:0.32em;display:inline-block;flex:none"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> รอสอบเทียบ ${pendingN}</span>` : ''}
-                <input type="number" min="1" max="${remain}" value="${qty||1}" class="qty-input"
-                  ${remain===0||!checked?'disabled':''}
+                <input type="number" min="1" max="${single?1:remain}" value="${qty||1}" class="qty-input"
+                  ${remain===0||!checked?'disabled':''} ${single?'readonly title="ยืมได้ครั้งละ 1 รายการ"':''}
                   data-act="qty-tool" data-cat="${cat}" data-name="${escAttr(g.name)}"/>
-              </div>`;
+              </div>${single ? `<div class="hint-be" style="padding:2px 14px 8px 40px;color:#b45309"><b>หมายเหตุ :</b> ยืมได้ครั้งละ 1 รายการ — จำนวนที่ต้องการยืมให้เขียนในช่องว่างในใบยืม</div>` : ''}`;
             }).join('')}
           </div>
         </div>`;
@@ -3180,6 +3197,7 @@ function renderEquipTable(list){
         <tbody>
           ${list.map(e=>{
             const held = unitIsHeld(e, todayISO(), todayISO());
+            const booked = !held && unitIsHeldForRange(e, todayISO(), '9999-12-31');
             const expired = isCalibExpired(e);
             return `
             <tr>
@@ -3203,7 +3221,7 @@ function renderEquipTable(list){
                 </div>
               </td>
               <td class="text-xs ${expired?'text-red-500 font-bold':''}">${e.nextCalib? fmtDateShortCE(e.nextCalib.slice(0,10)) : '-'}</td>
-              <td>${held?'<span class="pill pill-warn">ถูกยืมอยู่</span>':'<span class="pill pill-ok">ว่าง</span>'}</td>
+              <td>${held?'<span class="pill pill-warn">ถูกยืมอยู่</span>':(booked?'<span class="pill pill-warn" title="มีใบยืมที่จองไว้ในอนาคต ตอนนี้ยังว่างอยู่">ว่าง (มีจองล่วงหน้า)</span>':'<span class="pill pill-ok">ว่าง</span>')}</td>
               <td>
                 <div class="flex gap-1">
                   <button class="icon-btn" data-act="edit-equip" data-id="${e.id}" title="แก้ไข"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;vertical-align:-0.16em;display:inline-block;flex:none"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
@@ -3297,7 +3315,9 @@ function renderCalendar(){
       </div>`:''}
     </div>`;
   }
-  const dayList = c.selectedDay ? (borrowsByDay[c.selectedDay]||[]) : [];
+  // เรียงใบยืม: อนุมัติ/ใช้งานอยู่ (รวมเลยกำหนด) → คืนบางส่วน → คืนแล้ว/คืนก่อน/คืนช้า (คงลำดับเดิมในกลุ่มเดียวกัน)
+  const slipRank = (b)=> (b.status!=='active') ? 2 : (isBorrowPartiallyReturned(b) ? 1 : 0);
+  const dayList = c.selectedDay ? (borrowsByDay[c.selectedDay]||[]).slice().sort((x,y)=> slipRank(x.b)-slipRank(y.b)) : [];
   return `
   <div class="card p-5">
     <div class="flex items-center justify-between mb-4">
@@ -4912,6 +4932,8 @@ function toggleCat(cat){
   else state.form.selectedCats.push(cat);
 }
 function pickKey(cat,name){ return name+'|'+cat; }
+// เครื่องมือที่จำกัดให้ยืมได้ครั้งละ 1 รายการ (จำนวนที่ต้องการจริงให้เขียนเองในช่องว่างของใบยืม)
+function isSingleQtyTool(name){ return String(name||'').includes('กล่องโฟม'); }
 function toggleTool(cat, name){
   const key = pickKey(cat,name);
   if(state.form.picks[key]) delete state.form.picks[key];
@@ -4919,7 +4941,7 @@ function toggleTool(cat, name){
 }
 function setQty(cat, name, qty){
   const key = pickKey(cat,name);
-  if(state.form.picks[key]!==undefined) state.form.picks[key] = Math.max(1, qty);
+  if(state.form.picks[key]!==undefined) state.form.picks[key] = isSingleQtyTool(name) ? 1 : Math.max(1, qty);
 }
 
 function buildBorrowDraft(){
@@ -4951,7 +4973,7 @@ function buildBorrowDraft(){
   for(const key of pickKeys){
     const lastSep = key.lastIndexOf('|');
     const name = key.slice(0,lastSep), cat = key.slice(lastSep+1);
-    const qty = f.picks[key];
+    const qty = isSingleQtyTool(name) ? 1 : f.picks[key];
     const group = groupEquipment(cat, f.borrowDate, f.returnDate).find(g=>g.name===name);
     if(!group || group.availItems.length < qty){
       return { errs: [`เครื่องมือ "${name}" มีจำนวนว่างไม่พอสำหรับช่วงวันที่ ${fmtDateBE(f.borrowDate)} ถึง ${fmtDateBE(f.returnDate)} (ว่างจริง ${group?group.availItems.length:0} เครื่อง มีคนจองช่วงวันที่ทับซ้อนอยู่แล้ว)`] };
