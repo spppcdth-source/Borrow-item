@@ -1267,6 +1267,43 @@ function groupEquipment(category, borrowDate, returnDate){
   });
 }
 
+// นับจำนวนครั้งที่เครื่องแต่ละชิ้น (equipmentId) เคยถูกยืม จากประวัติใบยืมทั้งหมด (ทั้งที่คืนแล้วและยังไม่คืน)
+function countBorrowHistoryByUnit(){
+  const counts = new Map();
+  (state.borrows || []).forEach(b=>{
+    if(!b) return;
+    const ids = new Set();
+    if(b.itemsExpanded && b.itemsExpanded.length){
+      b.itemsExpanded.forEach(x=>{ if(x && x.equipmentId) ids.add(x.equipmentId); });
+    } else {
+      (b.items || []).forEach(it=>{
+        if(!it) return;
+        if(Array.isArray(it.equipmentIds)) it.equipmentIds.forEach(id=>{ if(id) ids.add(id); });
+        else if(it.equipmentId) ids.add(it.equipmentId);
+      });
+    }
+    ids.forEach(id=> counts.set(id, (counts.get(id)||0) + 1));
+  });
+  return counts;
+}
+// เลือกเครื่องจากกลุ่มที่ว่าง จำนวน qty ชิ้น
+// - เครื่องพร้อมใช้ (readyItems) มาก่อนเครื่องรอสอบเทียบ (pendingItems) เหมือนเดิม
+// - ภายในแต่ละกลุ่ม เลือกชิ้นที่ถูกยืมมาน้อยครั้งที่สุดก่อน ถ้าจำนวนครั้งเท่ากันให้สุ่ม
+function pickUnitsLeastBorrowed(group, qty){
+  const counts = countBorrowHistoryByUnit();
+  const pickFrom = (list, n)=>{
+    if(n <= 0) return [];
+    return list
+      .map(u=>({ u, c: counts.get(u.id) || 0, r: Math.random() }))
+      .sort((a,b)=> (a.c - b.c) || (a.r - b.r))
+      .slice(0, n)
+      .map(x=>x.u);
+  };
+  const chosen = pickFrom(group.readyItems, qty);
+  if(chosen.length < qty) chosen.push(...pickFrom(group.pendingItems, qty - chosen.length));
+  return chosen;
+}
+
 // เรียงลำดับใหม่: ให้กลุ่มเครื่องมือ (ชื่อเดียวกัน) ในหมวดหมู่หนึ่ง ๆ เรียงตาม newOrderNames ที่แอดมินกำหนด
 async function saveEquipmentOrder(category, newOrderNames){
   newOrderNames.forEach((name, idx)=>{
@@ -5097,7 +5134,7 @@ function buildBorrowDraft(){
     if(!group || group.availItems.length < qty){
       return { errs: [`เครื่องมือ "${name}" มีจำนวนว่างไม่พอสำหรับช่วงวันที่ ${fmtDateBE(f.borrowDate)} ถึง ${fmtDateBE(f.returnDate)} (ว่างจริง ${group?group.availItems.length:0} เครื่อง มีคนจองช่วงวันที่ทับซ้อนอยู่แล้ว)`] };
     }
-    const chosen = group.availItems.slice(0, qty);
+    const chosen = pickUnitsLeastBorrowed(group, qty);
     chosen.forEach(u=>{
       items.push({ equipmentId: u.id, name: u.name, assetCode: u.assetCode, category: cat, qty: 1 });
     });
