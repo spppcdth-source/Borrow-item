@@ -588,7 +588,7 @@ const state = {
   manage: { catFilter:'', statusFilter:'', search:'', editing:null },
   calendar: { year: new Date().getFullYear(), month: new Date().getMonth(), selectedDay:null },
   availCal: null, // { cat, name, year, month, selectedDay } — ปฏิทินสถานะการจองต่อรายการเครื่องมือ (เปิดดูได้โดยไม่ต้องล็อกอิน)
-  reports: { mode:'month', month: new Date().getMonth(), year: new Date().getFullYear(), fy: new Date().getFullYear()+543, half:'oct-mar', weekStart:'', filterDepts:[], filterProvinces:[], filterCategories:[], filterAssets:[], openFilterDropdown:null, filterSearch:{dept:'',province:'',category:'',asset:''}, unitSearch:'', topEquipCount:8, topUnitCount:15 },
+  reports: { mode:'fy', month: new Date().getMonth(), year: new Date().getFullYear(), fy: new Date().getFullYear()+543+(new Date().getMonth()>=9?1:0), half:'oct-mar', weekStart:'', tblDept:'', tblCode:'', filterDepts:[], filterProvinces:[], filterCategories:[], filterAssets:[], openFilterDropdown:null, filterSearch:{dept:'',province:'',category:'',asset:''}, unitSearch:'', topEquipCount:8, topUnitCount:15 },
   lastCreatedBorrowId: null,
   pendingBorrow: null,
   calibConfirmIds: null,
@@ -3820,6 +3820,16 @@ function renderFilterDropdown(ftype, label, options, selected, iconFn, labelFn){
 function renderReportsTab(){
   const range = getReportRange();
   const list = applyReportFilters(filterBorrowsByRange(range));
+  // ตัวกรองเฉพาะตาราง "รายละเอียดใบยืมในช่วงเวลาที่เลือก" (ไม่กระทบกราฟ/สถิติ/ส่งออก)
+  const _tblDeptSet = new Set(list.map(b=>b.dept).filter(Boolean));
+  if(state.reports.tblDept) _tblDeptSet.add(state.reports.tblDept);
+  const tblDeptOptions = DEPTS.filter(d=>_tblDeptSet.has(d)).concat(Array.from(_tblDeptSet).filter(d=>!DEPTS.includes(d)).sort((a,b)=>a.localeCompare(b,'th')));
+  const _tblCodeQ = (state.reports.tblCode||'').trim().toLowerCase();
+  const tblList = list.filter(b=>{
+    if(state.reports.tblDept && b.dept !== state.reports.tblDept) return false;
+    if(_tblCodeQ && !String(b.code||'').toLowerCase().includes(_tblCodeQ)) return false;
+    return true;
+  });
   const byEquip = {}, byDept = {}, byCat = {}, equipCat = {}, byProvince = {}, byProvinceBorrows = {};
   let totalQty = 0, returnedCount = 0, lateReturnedCount = 0;
   list.forEach(b=>{
@@ -4318,12 +4328,29 @@ function renderReportsTab(){
     </div>
 
     <div class="card p-5">
-      <h3 class="font-bold mb-3">รายละเอียดใบยืมในช่วงเวลาที่เลือก</h3>
+      <div class="flex items-end justify-between mb-3 flex-wrap gap-3">
+        <h3 class="font-bold">รายละเอียดใบยืมในช่วงเวลาที่เลือก</h3>
+        <div class="flex items-end gap-3 flex-wrap no-print">
+          <div>
+            <label class="lbl">หน่วยงาน</label>
+            <select id="r-tbl-dept" class="inp" style="min-width:180px">
+              <option value="">ทั้งหมด</option>
+              ${tblDeptOptions.map(d=>`<option value="${escAttr(d)}" ${state.reports.tblDept===d?'selected':''}>${esc(d)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="lbl">ค้นหารหัสใบยืม</label>
+            <input id="r-tbl-code" class="inp" style="width:220px" placeholder="เช่น สผป.-0001/2569" value="${escAttr(state.reports.tblCode||'')}" autocomplete="off"/>
+          </div>
+        </div>
+      </div>
+      <div class="text-xs subtle mb-2">แสดง ${tblList.length} จาก ${list.length} รายการ</div>
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr><th>รหัสใบยืม</th><th>วันที่ยืม</th><th>วันที่คืน</th><th>หน่วยงาน</th><th>ผู้ยืม</th><th>พื้นที่</th><th>รายการเครื่องมือ</th><th>สถานะ</th></tr></thead>
           <tbody>
-            ${list.map(b=>`
+            ${tblList.length===0 ? `<tr><td colspan="8" class="empty-hint">ไม่พบใบยืมที่ตรงกับตัวกรอง</td></tr>` : ''}
+            ${tblList.map(b=>`
               <tr class="report-row-click" data-act="view-slip-preview" data-id="${b.id}" title="คลิกเพื่อดูเอกสารใบยืม">
                 <td class="font-mono text-xs nowrap-cell">${esc(b.code)}</td>
                 <td class="text-xs">${fmtDateShort(b.borrowDate)}</td>
@@ -4594,6 +4621,7 @@ function attachHandlers(){
   bindTextInput('r-search-category', v=>{state.reports.filterSearch.category=v; renderSoft();});
   bindTextInput('r-search-asset', v=>{state.reports.filterSearch.asset=v; renderSoft();});
   bindTextInput('r-unit-search', v=>{state.reports.unitSearch=v; renderSoft();});
+  bindTextInput('r-tbl-code', v=>{state.reports.tblCode=v; renderSoft();});
   bindEnterKey('login-user', doLogin);
   bindEnterKey('login-pass', doLogin);
   bindEnterKey('clear-confirm-code', ()=>{ document.querySelector('[data-act="confirm-clear-do"]')?.click(); });
@@ -5035,6 +5063,7 @@ function onChange(e){
   if(el.id==='r-half'){ state.reports.half = el.value; render(); return; }
   if(el.id==='r-fy'){ state.reports.fy = parseInt(el.value); render(); return; }
   if(el.id==='r-fy2'){ state.reports.fy = parseInt(el.value); render(); return; }
+  if(el.id==='r-tbl-dept'){ state.reports.tblDept = el.value; render(); return; }
   if(el.id==='r-top-equip'){ state.reports.topEquipCount = el.value==='all' ? Infinity : parseInt(el.value); render(); return; }
   if(el.id==='r-top-unit'){ state.reports.topUnitCount = el.value==='all' ? Infinity : parseInt(el.value); render(); return; }
 
