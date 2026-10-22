@@ -295,6 +295,8 @@ h1,h2,h3{ font-family:'Kanit','Sarabun',sans-serif; }
 .slip-head .icon-btn{ flex:none; margin-left:auto; }
 .slip-actions{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:10px 0 12px; }
 .slip-preview-paper{ position:relative; background:#fff; width:210mm; max-width:none; transform-origin:top left; box-shadow:0 2px 12px rgba(0,0,0,.2); color:#000; }
+/* พรีวิวบนจอ: โลโก้ (สูง 22mm, วางที่ top:5mm) สูงกว่าบรรทัดหัวเรื่อง จึงทับแถว "ใบยืมเลขที่" -> เพิ่มความสูงบรรทัดหัวเรื่องในพรีวิวให้พ้นโลโก้ (ไม่กระทบตอนพิมพ์/PDF) */
+.slip-preview-paper .slip-header-line{ min-height:21mm; margin-bottom:10px; }
 .report-row-click{ cursor:pointer; transition:.12s; }
 .report-row-click:hover{ background:var(--chip-bg); }
 .report-row-click:hover td:first-child{ color:var(--primary); }
