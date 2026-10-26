@@ -5283,7 +5283,7 @@ async function notifyAdmin(id, opts={}){
   const bodyPlain = `มีใบยืมเครื่องมือใหม่เข้าระบบ\n\nรหัสใบยืม: ${b.code}\nผู้ยืม: ${b.name} (${b.dept})\nวันที่ยืม: ${fmtDateBE(b.borrowDate)}\nวันที่คืน: ${fmtDateBE(b.returnDate)}\nรายการ: ${itemsText}\n${slipLink ? ('\nไฟล์ใบยืม (PDF): '+slipLink+'\n') : ''}\n(ส่งจากระบบใบยืมเครื่องมือ)`;
 
   const baseParams = {
-    to_email: 'SPP.PCDTH@gmail.com',
+    to_email: 'smepcd@gmail.com',
     subject, code: b.code, name: b.name, dept: b.dept,
     borrow_date: fmtDateBE(b.borrowDate), return_date: fmtDateBE(b.returnDate),
     items: itemsText, message: bodyPlain,
@@ -5296,21 +5296,21 @@ async function notifyAdmin(id, opts={}){
       state.notifyStatus[id] = slipLink ? 'sent' : 'sent_no_link';
       if(!auto){
         alert(slipLink
-          ? 'ส่งอีเมลแจ้งเตือนไปที่ SPP.PCDTH@gmail.com สำเร็จแล้ว พร้อมลิงก์ดาวน์โหลด PDF'
+          ? 'ส่งอีเมลแจ้งเตือนไปที่ smepcd@gmail.com สำเร็จแล้ว พร้อมลิงก์ดาวน์โหลด PDF'
           : 'ส่งอีเมลแจ้งเตือนสำเร็จ แต่ไม่มีลิงก์ไฟล์ (ยังไม่ได้ตั้งค่า Cloudinary หรืออัปโหลดไม่สำเร็จ)');
       }
     }catch(err){
       state.notifyStatus[id] = 'failed';
       if(!auto){
         alert('ส่งอีเมลอัตโนมัติไม่สำเร็จ (' + (err && err.text || err) + ')\nจะเปิดโปรแกรมอีเมลให้กดส่งเองแทน');
-        window.location.href = `mailto:SPP.PCDTH@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyPlain)}`;
+        window.location.href = `mailto:smepcd@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyPlain)}`;
       }
     }
   } else {
     // ยังไม่ได้ตั้งค่า EmailJS -> ใช้ mailto (เปิดโปรแกรมอีเมลของเครื่อง แล้วผู้ใช้กดส่งเอง)
     state.notifyStatus[id] = 'failed';
     if(!auto){
-      window.location.href = `mailto:SPP.PCDTH@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyPlain)}`;
+      window.location.href = `mailto:smepcd@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyPlain)}`;
     }
   }
   render();
