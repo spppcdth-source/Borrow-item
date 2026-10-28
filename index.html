@@ -3549,8 +3549,8 @@ function availCalShift(dir){
   render();
 }
 function unitsForToolName(cat, name){
-  // ไม่นับเครื่องมือที่ "ชำรุด" เพราะให้ยืมไม่ได้อยู่แล้ว (ให้ตรงกับตัวเลข "คงเหลือ" ที่หน้ารายการ)
-  return state.equipment.filter(e=>e.category===cat && e.name===name && e.useStatus !== 'ชำรุด');
+  // [แก้ไข] นับเฉพาะเครื่องที่ยืมได้จริง (ใช้งานได้/รอสอบเทียบ) ไม่นับ ชำรุด/ส่งสอบเทียบ เพื่อให้ตรงกับตัวเลข "คงเหลือ" ที่หน้ารายการ
+  return state.equipment.filter(e=>e.category===cat && e.name===name && (e.useStatus === 'ใช้งานได้' || e.useStatus === 'รอสอบเทียบ'));
 }
 function renderAvailabilityCalendarModal(){
   const c = state.availCal;
