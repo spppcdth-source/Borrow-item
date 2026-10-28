@@ -2588,15 +2588,12 @@ function buildSlipHTML(b){
     <div class="slip-section-title-row">
       <div class="slip-section-title">รายการเครื่องมือที่ยืม</div>
     </div>
-    <table class="slip-table">
+    <table class="slip-table" style="margin-bottom:0">
       <thead><tr><th style="width:6%">ลำดับ</th><th style="width:11%">ประเภท</th><th>ชื่อเครื่องมือ</th><th style="width:22%">รหัสครุภัณฑ์</th><th style="width:7%">จำนวน</th><th class="chk-col" style="width:9%">สภาพ<br/>ก่อนใช้งาน</th><th class="chk-col" style="width:9%">สภาพ<br/>หลังใช้งาน</th></tr></thead>
       <tbody>${itemsRows}
-        <tr class="slip-remark-row">
-          <td colspan="4" style="border:none;padding:4px 0 0;vertical-align:bottom;"><div style="display:flex;align-items:flex-end;white-space:nowrap;height:2.1em;"><span style="flex-shrink:0;"><b>หมายเหตุ :</b></span><span style="flex:1 1 auto;border-bottom:1px dotted rgba(0,0,0,.55);height:0;min-width:1.5em;margin:0 0 0.3em 6px;"></span></div></td>
-          <td colspan="3" style="border:none;padding:4px 0 0;vertical-align:bottom;"><div style="display:flex;align-items:flex-end;justify-content:flex-end;white-space:nowrap;height:2.1em;"><span>ผู้ตรวจสอบ</span></div></td>
-        </tr>
       </tbody>
     </table>
+    <div class="slip-remark-block" style="display:flex;align-items:flex-end;gap:12px;margin:0 0 18px;break-inside:avoid;page-break-inside:avoid;white-space:nowrap;height:2.1em;"><div style="flex:1 1 auto;display:flex;align-items:flex-end;min-width:0;"><span style="flex-shrink:0;"><b>หมายเหตุ :</b></span><span style="flex:1 1 auto;border-bottom:1px dotted rgba(0,0,0,.55);height:0;min-width:1.5em;margin:0 0 0.3em 6px;"></span></div><div style="flex:0 0 25%;text-align:right;">ผู้ตรวจสอบ</div></div>
     <table class="sig-grid"><tbody>
       <tr>${buildSigBox('ผู้ยืม')}${buildSigBox('ผู้ให้ยืม')}</tr>
       <tr>${buildSigBox('ผู้คืนพัสดุ')}${buildSigBox('ผู้รับคืนพัสดุ')}</tr>
