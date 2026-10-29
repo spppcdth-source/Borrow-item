@@ -416,7 +416,7 @@ h1,h2,h3{ font-family:'Kanit','Sarabun',sans-serif; }
 .sig-box{ font-size:14pt; }
 .sig-row{ display:flex; align-items:flex-end; white-space:nowrap; height:2.1em; position:relative; }
 .sig-row-label{ flex-shrink:0; }
-.sig-row-dots{ flex:1 1 auto; border-bottom:1px dotted rgba(0,0,0,.55); height:0; min-width:1.5em; margin:0 1px 0.3em; }
+.sig-row-dots{ flex:1 1 auto; border-bottom:0.75pt dotted #000; height:0; min-width:1.5em; margin:0 1px 0.3em; }
 .sig-row-role{ flex-shrink:0; padding-left:4px; }
 .sig-row-top .sig-row-role, .sig-row-paren .sig-row-role, .sig-row-position .sig-row-role{ position:absolute; right:0; bottom:0.3em; background:#fff; padding-left:2px; text-align:right; }
 .sig-row-paren{ padding-left:1.5em; } .sig-row-paren .sig-row-role, .sig-row-top .sig-row-role{ bottom:0; } .sig-row-position .sig-row-role{ padding-left:0; }
@@ -432,6 +432,7 @@ h1,h2,h3{ font-family:'Kanit','Sarabun',sans-serif; }
   body.printing-report .modal-backdrop{ display:none !important; }
   body.printing-report .no-print{ display:none !important; }
   @page{ size:A4; margin:10mm; }
+  body.printing-slip, body.printing-slip *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 
   /* ---- Report print theme: force a clean, light, high-contrast look regardless of the on-screen theme ---- */
   body.printing-report{
@@ -2593,7 +2594,7 @@ function buildSlipHTML(b){
       <tbody>${itemsRows}
       </tbody>
     </table>
-    <div class="slip-remark-block" style="display:flex;align-items:flex-end;gap:12px;margin:0 0 18px;break-inside:avoid;page-break-inside:avoid;white-space:nowrap;height:2.1em;"><div style="flex:1 1 auto;display:flex;align-items:flex-end;min-width:0;"><span style="flex-shrink:0;"><b>หมายเหตุ :</b></span><span style="flex:1 1 auto;border-bottom:1px dotted rgba(0,0,0,.55);height:0;min-width:1.5em;margin:0 0 0.3em 6px;"></span></div><div style="flex:0 0 25%;text-align:right;">ผู้ตรวจสอบ</div></div>
+    <div class="slip-remark-block" style="display:flex;align-items:flex-end;gap:12px;margin:0 0 18px;break-inside:avoid;page-break-inside:avoid;white-space:nowrap;height:2.1em;"><div style="flex:1 1 auto;display:flex;align-items:flex-end;min-width:0;"><span style="flex-shrink:0;"><b>หมายเหตุ :</b></span><span style="flex:1 1 auto;border-bottom:0.75pt dotted #000;height:0;min-width:1.5em;margin:0 0 0.3em 6px;"></span></div><div style="flex:0 0 25%;text-align:right;">ผู้ตรวจสอบ</div></div>
     <table class="sig-grid"><tbody>
       <tr>${buildSigBox('ผู้ยืม')}${buildSigBox('ผู้ให้ยืม')}</tr>
       <tr>${buildSigBox('ผู้คืนพัสดุ')}${buildSigBox('ผู้รับคืนพัสดุ')}</tr>
@@ -2703,14 +2704,14 @@ const SLIP_STANDALONE_CSS = `
   .sig-box{ font-size:14pt; }
   .sig-row{ display:flex; align-items:flex-end; white-space:nowrap; height:2.1em; position:relative; }
   .sig-row-label{ flex-shrink:0; }
-  .sig-row-dots{ flex:1 1 auto; border-bottom:1px dotted rgba(0,0,0,.55); height:0; min-width:1.5em; margin:0 1px 0.3em; }
+  .sig-row-dots{ flex:1 1 auto; border-bottom:0.75pt dotted #000; height:0; min-width:1.5em; margin:0 1px 0.3em; }
   .sig-row-role{ flex-shrink:0; padding-left:4px; }
   .sig-row-top .sig-row-role, .sig-row-paren .sig-row-role, .sig-row-position .sig-row-role{ position:absolute; right:0; bottom:0.3em; background:#fff; padding-left:2px; text-align:right; }
   .sig-row-paren{ padding-left:1.5em; } .sig-row-paren .sig-row-role, .sig-row-top .sig-row-role{ bottom:0; } .sig-row-position .sig-row-role{ padding-left:0; }
 .sig-row-top{ height:3.6em; }
   .sig-row-date .sig-row-dots{ flex:1.7 1 0; }
 .sig-row-date .sig-row-dots.grow{ flex:1 1 0; }
-  @media print{ @page{ size:A4; margin:10mm; @top-left{ content:""; } @top-center{ content:""; } @top-right{ content:""; } @bottom-left{ content:""; } @bottom-center{ content:""; } @bottom-right{ content:""; } } }
+  @media print{ *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; } @page{ size:A4; margin:10mm; @top-left{ content:""; } @top-center{ content:""; } @top-right{ content:""; } @bottom-left{ content:""; } @bottom-center{ content:""; } @bottom-right{ content:""; } } }
 `;
 function buildSlipStandaloneHTML(b){
   return `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"/>
